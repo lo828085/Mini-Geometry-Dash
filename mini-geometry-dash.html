@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Mini Geometry Dash</title>
+  <style>
+    body {
+      margin: 0;
+      background: #111;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      font-family: sans-serif;
+    }
+
+    #game {
+      position: relative;
+      width: 600px;
+      height: 300px;
+      background: #222;
+      overflow: hidden;
+      border: 2px solid #444;
+      margin-top: 20px;
+    }
+
+    #player {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background: #0ff;
+      bottom: 0;
+      left: 50px;
+      transform: rotate(0deg);
+      transition: transform 0.05s linear;
+    }
+
+    .obstacle {
+      position: absolute;
+      width: 30px;
+      height: 30px;
+      background: #f00;
+      bottom: 0;
+    }
+
+    .obstacle .hitbox {
+      position: absolute;
+      top: 5px;
+      left: 5px;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #ff0;
+      box-sizing: border-box;
+      pointer-events: none;
+      opacity: 0.5;
+      border-radius: 3px;
+    }
+
+    #score, #highScore {
+      color: #0f0;
+      font-size: 24px;
+      margin-top: 10px;
+    }
+
+    #highScore.highest {
+      color: #6f6;
+      font-weight: bold;
+    }
+
+    #restartBtn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      display: none;
+    }
+  </style>
+</head>
+<body>
+  <h1 style="color: #0ff">Mini Geometry Dash</h1>
+  <div id="score">Score: 0</div>
+  <div id="highScore">High Score: 0</div>
+  <div id="game">
+    <div id="player"></div>
+  </div>
+  <button id="restartBtn">Restart</button>
+
+  <!-- Audio -->
+  <audio id="jumpSound" src="https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg" preload="auto"></audio>
+  <audio id="crashSound" src="https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg" preload="auto"></audio>
+
+  <script>
+    const game = document.getElementById('game');
+    const player = document.getElementById('player');
+    const restartBtn = document.getElementById('restartBtn');
+    const scoreDisplay = document.getElementById('score');
+    const highScoreDisplay = document.getElementById('highScore');
+
+    const jumpSound = document.getElementById('jumpSound');
+    const crashSound = document.getElementById('crashSound');
+
+    let isJumping = false;
+    let gravity = 1.2;
+    let jumpHeight = 0;
+    let jumpSpeed = 12;
+    let currentJumpSpeed = 0;
+    let gameOver = false;
+    let rotation = 0;
+    let totalJumpTime = 0;
+    let rotationPerFrame = 0;
+    let score = 0;
+
+    let highScore = parseInt(localStorage.getItem('miniGeometryDashHighScore')) || 0;
+    highScoreDisplay.textContent = `High Score: ${highScore}`;
+
+    // Predefined fixed obstacles positions for a single level
+    const levelObstacles = [
+      { x: 600 },
+      { x: 900 },
+      { x: 1300 },
+      { x: 1700 },
+      { x: 2100 },
+      { x: 2500 },
+      { x: 2900 }
+    ];
+
+    let obstacles = [];
+
+    function createLevelObstacles() {
+      levelObstacles.forEach(({ x }) => {
+        const obstacle = document.createElement('div');
+        obstacle.classList.add('obstacle');
+        obstacle.style.left = x + 'px';
+
+        const hitbox = document.createElement('div');
+        hitbox.classList.add('hitbox');
+        obstacle.appendChild(hitbox);
+
+        game.appendChild(obstacle);
+        obstacles.push(obstacle);
+      });
+    }
+
+    function jump() {
+      if (!isJumping) {
+        isJumping = true;
+        currentJumpSpeed = jumpSpeed;
+        totalJumpTime = (2 * jumpSpeed) / gravity;
+        rotationPerFrame = 180 / totalJumpTime;
+        jumpSound.currentTime = 0;
+        jumpSound.play();
+      }
+    }
+
+    function gameLoop() {
+      if (gameOver) return;
+
+      // Jumping physics & rotation
+      if (isJumping) {
+        jumpHeight += currentJumpSpeed;
+        currentJumpSpeed -= gravity;
+        rotation += rotationPerFrame;
+        player.style.transform = `rotate(${rotation}deg)`;
+
+        if (jumpHeight <= 0) {
+          jumpHeight = 0;
+          isJumping = false;
+          rotation = Math.round(rotation / 180) * 180;
+          player.style.transform = `rotate(${rotation}deg)`;
+        }
+        player.style.bottom = jumpHeight + 'px';
+      }
+
+      // Move obstacles & check collisions
+      let allPassed = true;
+
+      for (let i = 0; i < obstacles.length; i++) {
+        const obs = obstacles[i];
+        let obsLeft = parseInt(obs.style.left);
+        obsLeft -= 5;
+        obs.style.left = obsLeft + 'px';
+
+        if (obsLeft + 30 > 50) {
+          allPassed = false;
+        } else if (!obs.passed) {
+          obs.passed = true;
+          score++;
+          scoreDisplay.textContent = `Score: ${score}`;
+
+          if (score > highScore) {
+            highScore = score;
+            localStorage.setItem('miniGeometryDashHighScore', highScore);
+            highScoreDisplay.textContent = `High Score: ${highScore}`;
+            highScoreDisplay.classList.add('highest');
+          }
+        }
+
+        // Hitbox collision detection
+        const playerLeft = 50;
+        const playerBottom = parseInt(player.style.bottom);
+        const playerHitboxLeft = playerLeft;
+        const playerHitboxRight = playerLeft + 30;
+        const playerHitboxBottom = playerBottom;
+        const playerHitboxTop = playerBottom + 30;
+
+        const obsHitboxLeft = obsLeft + 5;
+        const obsHitboxRight = obsHitboxLeft + 20;
+        const obsHitboxBottom = 0;
+        const obsHitboxTop = obsHitboxBottom + 20;
+
+        const horizontalOverlap = playerHitboxRight > obsHitboxLeft && playerHitboxLeft < obsHitboxRight;
+        const verticalOverlap = playerHitboxBottom < obsHitboxTop && playerHitboxTop > obsHitboxBottom;
+
+        if (horizontalOverlap && verticalOverlap) {
+          endGame();
+          return;
+        }
+      }
+
+      // Level complete check
+      if (allPassed) {
+        alert('Level Complete! 🎉');
+        endGame();
+        return;
+      }
+
+      requestAnimationFrame(gameLoop);
+    }
+
+    function endGame() {
+      gameOver = true;
+      restartBtn.style.display = 'block';
+      crashSound.currentTime = 0;
+      crashSound.play();
+    }
+
+    function restartGame() {
+      jumpHeight = 0;
+      currentJumpSpeed = 0;
+      isJumping = false;
+      rotation = 0;
+      player.style.transform = 'rotate(0deg)';
+      player.style.bottom = '0px';
+      obstacles.forEach(obs => obs.remove());
+      obstacles = [];
+      score = 0;
+      scoreDisplay.textContent = 'Score: 0';
+      gameOver = false;
+      restartBtn.style.display = 'none';
+      highScoreDisplay.classList.remove('highest');
+      createLevelObstacles();
+      requestAnimationFrame(gameLoop);
+    }
+
+    document.body.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        jump();
+      }
+    });
+
+    restartBtn.addEventListener('click', restartGame);
+
+    // Start game
+    createLevelObstacles();
+    requestAnimationFrame(gameLoop);
+  </script>
+</body>
+</html>
